@@ -24,6 +24,14 @@ async function bootstrap() {
 
   app.useLogger(app.get(WINSTON_MODULE_NEST_PROVIDER));
 
+  app.use('/v0', (req, res) => {
+    res.status(410).json({
+      message: 'The /v0 API is deprecated. Please migrate to /v1.',
+      migrationGuide: '/api/docs#versioning',
+      deprecated: true,
+    });
+  });
+
   app.setGlobalPrefix('v1');
   app.useGlobalPipes(new ValidationPipe({ whitelist: true }), new SanitizationPipe());
   app.useGlobalFilters(new HttpExceptionFilter(), new ValidationExceptionFilter());

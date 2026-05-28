@@ -7,6 +7,11 @@ export enum ImportJobStatus {
   FAILED = 'failed',
 }
 
+export enum ImportJobType {
+  COURSE = 'course',
+  USER = 'user',
+}
+
 @Entity('import_jobs')
 export class ImportJob {
   @PrimaryGeneratedColumn('uuid')
@@ -14,6 +19,9 @@ export class ImportJob {
 
   @Column()
   instructorId: string;
+
+  @Column({ type: 'enum', enum: ImportJobType, default: ImportJobType.COURSE })
+  type: ImportJobType;
 
   @Column({ type: 'enum', enum: ImportJobStatus, default: ImportJobStatus.PENDING })
   status: ImportJobStatus;

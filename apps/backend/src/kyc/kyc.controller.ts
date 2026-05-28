@@ -1,5 +1,15 @@
-import { Body, Controller, Get, Param, Post, Put } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Put,
+  UploadedFile,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiConsumes } from '@nestjs/swagger';
 import { KycService } from './kyc.service';
 
 @ApiTags('kyc')
@@ -20,6 +30,34 @@ export class KycController {
   upsertCustomer(@Body() body: { stellarPublicKey: string; [key: string]: string }) {
     const { stellarPublicKey, ...fields } = body;
     return this.kycService.upsertCustomer(stellarPublicKey, fields);
+  }
+
+  @Post('customer/document')
+  @ApiOperation({ summary: 'Upload a KYC document for a customer' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        stellarPublicKey: { type: 'string' },
+        document: { type: 'string', format: 'binary' },
+      },
+      required: ['stellarPublicKey', 'document'],
+    },
+  })
+  @UseInterceptors(FileInterceptor('document', { limits: { fileSize: 15 * 1024 * 1024 } }))
+  uploadDocument(
+    @Body('stellarPublicKey') stellarPublicKey: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    return this.kycService.uploadDocument(stellarPublicKey, file);
+  }
+
+  @Get('report')
+  @ApiOperation({ summary: 'Get compliance report for KYC statuses' })
+  @ApiResponse({ status: 200, description: 'Returns summary counts for KYC status values' })
+  getComplianceReport() {
+    return this.kycService.getComplianceReport();
   }
 
   /** Webhook called by the KYC provider when verification status changes */

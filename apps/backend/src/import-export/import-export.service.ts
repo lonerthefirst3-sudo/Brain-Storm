@@ -62,6 +62,42 @@ export class ImportExportService {
     };
   }
 
+  async exportCourseCsv(courseId: string): Promise<string> {
+    const exportData = await this.exportCourse(courseId);
+    const headers = [
+      'courseTitle',
+      'courseDescription',
+      'courseLevel',
+      'requiresKyc',
+      'moduleTitle',
+      'moduleOrder',
+      'lessonOrder',
+      'lessonTitle',
+      'lessonDurationMinutes',
+      'lessonVideoUrl',
+    ];
+
+    const rows = exportData.course.modules.flatMap((module) =>
+      module.lessons.map((lesson) => [
+        exportData.course.title,
+        exportData.course.description,
+        exportData.course.level,
+        String(exportData.course.requiresKyc),
+        module.title,
+        String(module.order),
+        String(lesson.order),
+        lesson.title,
+        String(lesson.durationMinutes),
+        lesson.videoUrl ?? '',
+      ]),
+    );
+
+    const escapeValue = (value: string) =>
+      `"${String(value).replace(/"/g, '""')}"`;
+
+    return [headers.map(escapeValue).join(','), ...rows.map((row) => row.map(escapeValue).join(','))].join('\n');
+  }
+
   // ─── JSON Import ───────────────────────────────────────────────────────────
 
   async importJson(

@@ -11,6 +11,7 @@ import { SearchService } from '../search/search.service';
 @Injectable()
 export class CoursesService {
   private readonly CACHE_KEY = 'courses:all';
+  private readonly COURSE_CACHE_KEY_PREFIX = 'courses:';
   private readonly CACHE_TTL = 60;
 
   constructor(
@@ -20,6 +21,15 @@ export class CoursesService {
   ) {}
 
   async findAll(query: CourseQueryDto = {}) {
+    const { search, level, page = 1, limit = 20 } = query;
+    const cacheKey = `${this.CACHE_KEY}:${search ?? 'all'}:${level ?? 'all'}:${page}:${limit}`;
+
+    return this.cacheManager.wrap(cacheKey, async () => this.queryCourses(query), {
+      ttl: this.CACHE_TTL,
+    });
+  }
+
+  private async queryCourses(query: CourseQueryDto = {}) {
     const { search, level, page = 1, limit = 20 } = query;
 
     const qb = this.repo
@@ -62,9 +72,12 @@ export class CoursesService {
   }
 
   async findOne(id: string): Promise<Course> {
-    const course = await this.repo.findOne({ where: { id, isDeleted: false } });
-    if (!course) throw new NotFoundException('Course not found');
-    return course;
+    const cacheKey = `${this.COURSE_CACHE_KEY_PREFIX}${id}`;
+    return this.cacheManager.wrap(cacheKey, async () => {
+      const course = await this.repo.findOne({ where: { id, isDeleted: false } });
+      if (!course) throw new NotFoundException('Course not found');
+      return course;
+    }, { ttl: this.CACHE_TTL });
   }
 
   async create(data: Partial<Course>) {
@@ -78,7 +91,7 @@ export class CoursesService {
     const course = await this.findOne(id);
     if (!course) throw new NotFoundException('Course not found');
     const updated = await this.repo.save({ ...course, ...data });
-    await this.invalidateCache();
+    await this.invalidateCache(id);
     await this.searchService.indexCourse(updated).catch(() => {});
     return updated;
   }
@@ -87,13 +100,35 @@ export class CoursesService {
     const course = await this.findOne(id);
     if (!course) throw new NotFoundException('Course not found');
     const removed = await this.repo.remove(course);
-    await this.invalidateCache();
+    await this.invalidateCache(id);
     await this.searchService.deleteFromIndex('courses', id).catch(() => {});
     return removed;
   }
 
-  private async invalidateCache() {
-    await this.cacheManager.del(this.CACHE_KEY);
+  private async invalidateCache(id?: string) {
+    await this.deleteCacheKeys(`${this.CACHE_KEY}:*`);
+    if (id) {
+      await this.cacheManager.del(`${this.COURSE_CACHE_KEY_PREFIX}${id}`);
+    }
+  }
+
+  private async deleteCacheKeys(pattern: string) {
+    const store: any = (this.cacheManager as any).store;
+    const client = store?.getClient?.();
+
+    if (!client || typeof client.keys !== 'function') {
+      await this.cacheManager.reset();
+      return;
+    }
+
+    const keys: string[] = await client.keys(pattern);
+    if (keys.length) {
+      await client.del(...keys);
+    }
+  }
+
+  async warmCache() {
+    await this.findAll({});
   }
 
   async scheduleCourse(id: string, scheduledAt: Date): Promise<Course> {

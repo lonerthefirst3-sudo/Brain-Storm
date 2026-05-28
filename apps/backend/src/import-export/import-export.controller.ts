@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   Post,
+  Query,
   Res,
   UploadedFile,
   UploadedFiles,
@@ -13,7 +14,7 @@ import {
   Request,
 } from '@nestjs/common';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
-import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
@@ -31,8 +32,24 @@ export class ImportExportController {
   constructor(private readonly service: ImportExportService) {}
 
   @Get(':id/export')
-  @ApiOperation({ summary: 'Export a course as JSON' })
-  async exportCourse(@Param('id') id: string, @Res() res: Response) {
+  @ApiOperation({ summary: 'Export a course as JSON or CSV' })
+  @ApiQuery({ name: 'format', required: false, enum: ['json', 'csv'], description: 'Output format for export' })
+  async exportCourse(
+    @Param('id') id: string,
+    @Query('format') format: string = 'json',
+    @Res() res: Response,
+  ) {
+    const normalized = (format || 'json').toLowerCase();
+
+    if (normalized === 'csv') {
+      const csv = await this.service.exportCourseCsv(id);
+      res
+        .setHeader('Content-Type', 'text/csv')
+        .setHeader('Content-Disposition', `attachment; filename="course-${id}.csv"`)
+        .send(csv);
+      return;
+    }
+
     const data = await this.service.exportCourse(id);
     res
       .setHeader('Content-Type', 'application/json')

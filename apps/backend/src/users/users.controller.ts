@@ -5,14 +5,25 @@ import {
   Query,
   Patch,
   Delete,
+  Post,
   Body,
   UseGuards,
   Request,
   ForbiddenException,
   NotFoundException,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { UsersService } from './users.service';
-import { ApiBearerAuth, ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBody,
+  ApiConsumes,
+} from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -123,6 +134,33 @@ export class AdminUsersController {
       isVerified: isVerified === 'true' ? true : isVerified === 'false' ? false : undefined,
       search,
     });
+  }
+
+  @Post('import/csv')
+  @Roles('admin')
+  @ApiOperation({ summary: 'Bulk import users from a CSV file' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: { type: 'string', format: 'binary' },
+      },
+    },
+  })
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 20 * 1024 * 1024 } }))
+  importUsers(@UploadedFile() file: Express.Multer.File, @Request() req: { user: { id: string } }) {
+    if (!file) {
+      throw new NotFoundException('CSV file is required for bulk import');
+    }
+    return this.usersService.bulkImportUsersCsv(file.buffer, req.user.id);
+  }
+
+  @Get('import-jobs/:jobId')
+  @Roles('admin')
+  @ApiOperation({ summary: 'Get bulk user import job status' })
+  getUserImportJob(@Param('jobId') jobId: string) {
+    return this.usersService.findImportJob(jobId);
   }
 
   @Patch(':id/role')

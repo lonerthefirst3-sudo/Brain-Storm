@@ -28,6 +28,7 @@ import { ImportExportModule } from './import-export/import-export.module';
 import { SearchModule } from './search/search.module';
 import { BatchModule } from './batch/batch.module';
 import { ApiUsageModule } from './api-usage/api-usage.module';
+import { CacheManagementModule } from './cache/cache-management.module';
 import { ApiUsageInterceptor } from './api-usage/api-usage.interceptor';
 import { QuizzesModule } from './quizzes/quizzes.module';
 import { CohortsModule } from './cohorts/cohorts.module';
@@ -117,6 +118,7 @@ import { validationSchema } from './config/validation.schema';
     BatchModule,
     ApiUsageModule,
     QuizzesModule,
+    CacheManagementModule,
     CohortsModule,
     CdnModule,
     AccessControlModule,

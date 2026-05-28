@@ -7,7 +7,7 @@ import {
 } from 'typeorm';
 
 export type BatchJobStatus = 'pending' | 'processing' | 'completed' | 'failed';
-export type BatchJobType = 'users' | 'courses';
+export type BatchJobType = 'users' | 'courses' | 'certificates' | 'emails' | 'export';
 
 @Entity('batch_jobs')
 export class BatchJob {

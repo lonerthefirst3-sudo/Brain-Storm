@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { KycCustomer, KycStatus } from './kyc-customer.entity';
+import { KycDocument } from './kyc-document.entity';
 
 @Injectable()
 export class KycService {
@@ -11,6 +12,7 @@ export class KycService {
 
   constructor(
     @InjectRepository(KycCustomer) private repo: Repository<KycCustomer>,
+    @InjectRepository(KycDocument) private documentRepo: Repository<KycDocument>,
     private configService: ConfigService
   ) {
     this.apiKey = this.configService.get<string>('kyc.providerApiKey') ?? '';
@@ -60,6 +62,71 @@ export class KycService {
     }
 
     return this.repo.save(customer);
+  }
+
+  async uploadDocument(
+    stellarPublicKey: string,
+    file: Express.Multer.File
+  ): Promise<{ documentId: string; status: KycStatus }> {
+    const customer = await this.repo.findOne({ where: { stellarPublicKey } });
+    if (!customer) {
+      throw new Error(`Customer record not found for ${stellarPublicKey}`);
+    }
+
+    const document = this.documentRepo.create({
+      stellarPublicKey,
+      filename: file.originalname,
+      mimetype: file.mimetype,
+      size: file.size,
+      providerReference: null,
+      metadata: { uploadDate: new Date().toISOString() },
+    });
+
+    if (this.apiKey) {
+      try {
+        const response = await fetch('https://api.synaps.io/v4/individual/document', {
+          method: 'POST',
+          headers: {
+            'Client-Id': this.apiKey,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            alias: stellarPublicKey,
+            filename: file.originalname,
+            contentBase64: file.buffer.toString('base64'),
+            mimeType: file.mimetype,
+          }),
+        });
+        if (response.ok) {
+          const payload = await response.json();
+          document.providerReference = payload.document_id ?? payload.id ?? null;
+        } else {
+          this.logger.warn(`KYC document upload failed with ${response.status}`);
+        }
+      } catch (err) {
+        this.logger.error(`KYC document upload failed: ${err.message}`);
+      }
+    }
+
+    const savedDocument = await this.documentRepo.save(document);
+    customer.status = 'pending';
+    await this.repo.save(customer);
+
+    return { documentId: savedDocument.id, status: customer.status };
+  }
+
+  async getComplianceReport() {
+    const results = await this.repo
+      .createQueryBuilder('customer')
+      .select('customer.status', 'status')
+      .addSelect('COUNT(*)', 'count')
+      .groupBy('customer.status')
+      .getRawMany();
+
+    return results.reduce((acc, row) => {
+      acc[row.status] = Number(row.count);
+      return acc;
+    }, {} as Record<string, number>);
   }
 
   /** Called by the webhook endpoint when the provider sends a status update */
